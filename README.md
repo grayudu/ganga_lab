@@ -59,3 +59,4 @@ terraform init
 terraform plan
 terraform apply #say yes when all resources listing correctly
 ```
+- please update with aws profile details in terraform provider section.
