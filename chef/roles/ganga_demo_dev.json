@@ -1,0 +1,23 @@
+{
+    "name": "ganga_demo_dev",
+    "description": "Ganga Demo environment",
+    "chef_type": "role",
+    "json_class": "Chef::Role",
+    "default_attributes": {
+    },
+    "override_attributes": {
+        "sslproxy-nginx": {
+            "server-names" : "*.amazonaws.com",
+            "ssl" : {
+                "name" : "server"
+            }
+        }
+    },
+    "run_list": [
+        "recipe[sslproxy-nginx]",
+        "recipe[ganga-app]"
+    ],
+    "env_run_lists": {
+
+    }
+}

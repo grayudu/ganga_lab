@@ -1,0 +1,168 @@
+from flask import Flask
+from flask import render_template
+import socket
+import random
+import os
+import argparse
+import datetime
+import boto3
+import subprocess
+import pymysql
+import config
+
+
+app = Flask(__name__)
+
+color_codes = {
+    "red": "#e74c3c",
+    "green": "#16a085",
+    "blue": "#2980b9",
+    "blue2": "#30336b",
+    "pink": "#be2edd",
+    "darkblue": "#130f40"
+}
+
+SUPPORTED_COLORS = ",".join(color_codes.keys())
+
+# Get color from Environment variable
+COLOR_FROM_ENV = os.environ.get('APP_COLOR')
+# Generate a random color
+COLOR = random.choice(["red", "green", "blue", "blue2", "darkblue", "pink"])
+
+curr_date = datetime.datetime.now()
+ec2 = boto3.resource('ec2', region_name='<%= node["ganga-app"]["region"] %>')
+client = boto3.client('autoscaling', region_name='<%= node["ganga-app"]["region"] %>')
+
+
+out = subprocess.Popen(['nginx', '-v'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+stdout,stderr = out.communicate()
+
+rds_host  = config.DATABASE_CONFIG['host']
+name = config.DATABASE_CONFIG['user']
+password = config.DATABASE_CONFIG['password']
+db_name = config.DATABASE_CONFIG['dbname']
+port = config.DATABASE_CONFIG['port']
+
+try:
+    conn = pymysql.connect(rds_host, user=name, passwd=password, db=db_name, connect_timeout=5)
+except:
+    print("DB down")
+try:
+    cur = conn.cursor()
+    cur.execute("create table Employee (EmpID  int NOT NULL, Name varchar(255) NOT NULL, PRIMARY KEY (EmpID))")
+    cur.execute('insert into Employee (EmpID, Name) values(1, "Joe")')
+    conn.commit()
+    cur.execute("select * from Employee")
+    print(cur.description)
+except:
+    print("done!")
+
+@app.route("/")
+def main():
+    # return 'Hello'
+    db_str = []
+    try:
+        conn = pymysql.connect(rds_host, user=name, passwd=password, db=db_name, connect_timeout=5)
+    except:
+        print("DB down")
+    try:
+        cur = conn.cursor()
+        cur.execute("select * from Employee")
+        for row in cur:
+            db_str.append(row)
+    except:
+        db_str = ["DB not ready"]
+    data = []
+    data_ip = []    
+    paginator = client.get_paginator('describe_auto_scaling_groups')
+    groups = paginator.paginate(PaginationConfig={'PageSize': 100})
+    #print groups
+    filtered_asgs = groups.search('AutoScalingGroups[] | [?contains(Tags[?Key==`{}`].Value, `{}`)]'.format('Project', '<%= node["ganga-app"]["Project"] %>'))
+    for asg in filtered_asgs:
+        print asg['AutoScalingGroupName']
+        instance_ids = [i for i in asg['Instances']]
+        print(instance_ids)
+        for i in instance_ids:
+            data.append((i['InstanceId'], i['AvailabilityZone'], i['HealthStatus']))
+        running_instances = ec2.instances.filter(Filters=[{}])
+        for instance in running_instances:
+            data_ip.append(instance.private_ip_address)
+    return render_template('home.html', name=socket.gethostname(), date=curr_date, len=len(data), instance_data=data, db_data=db_str, color=color_codes[COLOR])
+
+@app.route("/health")
+def health():
+    # return 'Hello'
+    db_str = []
+    try:
+        conn = pymysql.connect(rds_host, user=name, passwd=password, db=db_name, connect_timeout=5)
+    except:
+        print("DB down")
+    try:
+        cur = conn.cursor()
+        cur.execute("select * from Employee")
+        for row in cur:
+            db_str.append(row)
+        if len(db_str) > 0:
+            health = "OK"
+        else:
+            health = "FAIL"
+    except:
+        health = "DB Down"
+    return render_template('health.html', name=socket.gethostname(), date=curr_date, h_check=health, color=color_codes[COLOR])
+
+@app.route("/diag")
+def diag():
+    # return 'Hello'
+    data = []
+    data_ip = []  
+    paginator = client.get_paginator('describe_auto_scaling_groups')
+    groups = paginator.paginate(PaginationConfig={'PageSize': 100})
+    #print groups
+    filtered_asgs = groups.search('AutoScalingGroups[] | [?contains(Tags[?Key==`{}`].Value, `{}`)]'.format('Project', '<%= node["ganga-app"]["Project"] %>'))
+    for asg in filtered_asgs:
+        print asg['AutoScalingGroupName']
+        instance_ids = [i for i in asg['Instances']]
+        print(instance_ids)
+        for i in instance_ids:
+            data.append((i['InstanceId'], i['AvailabilityZone'], i['HealthStatus']))
+        running_instances = ec2.instances.filter(Filters=[{}])
+        for instance in running_instances:
+            data_ip.append(instance.private_ip_address)
+    return render_template('diag.html', name=socket.gethostname(), date=curr_date, len=len(data), instance_data=data, nginx_ver=stdout, color=color_codes[COLOR])
+
+if __name__ == "__main__":
+
+    print(" This is a sample web application that displays a colored background. \n"
+          " A color can be specified in two ways. \n"
+          "\n"
+          " 1. As a command line argument with --color as the argument. Accepts one of " + SUPPORTED_COLORS + " \n"
+          " 2. As an Environment variable APP_COLOR. Accepts one of " + SUPPORTED_COLORS + " \n"
+          " 3. If none of the above then a random color is picked from the above list. \n"
+          " Note: Command line argument precedes over environment variable.\n"
+          "\n"
+          "")
+
+    # Check for Command Line Parameters for color
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--color', required=False)
+    args = parser.parse_args()
+
+    if args.color:
+        print("Color from command line argument =" + args.color)
+        COLOR = args.color
+        if COLOR_FROM_ENV:
+            print("A color was set through environment variable -" + COLOR_FROM_ENV + ". However, color from command line argument takes precendence.")
+    elif COLOR_FROM_ENV:
+        print("No Command line argument. Color from environment variable =" + COLOR_FROM_ENV)
+        COLOR = COLOR_FROM_ENV
+    else:
+        print("No command line argument or environment variable. Picking a Random Color =" + COLOR)
+
+    # Check if input color is a supported one
+    if COLOR not in color_codes:
+        print("Color not supported. Received '" + COLOR + "' expected one of " + SUPPORTED_COLORS)
+        exit(1)
+
+    # Run Flask Application
+    app.run(host="0.0.0.0", port=<%= node["ganga-app"]["port"] %>)
+

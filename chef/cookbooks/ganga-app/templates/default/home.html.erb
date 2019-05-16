@@ -1,0 +1,27 @@
+<!doctype html>
+<title>Home from Flask</title>
+<body style="background: {{ color }};">
+</body>
+<div style="color: #e4e4e4;
+    text-align:  center;
+    height: 90px;
+    vertical-align:  middle;">
+
+  <img src="<%= node["ganga-app"]["s3_endpoint"] %>" alt="flower">
+{% if name %}
+  <h1>Hello World from {{ name }}! {{ date }}</h1>
+  {%for i in range(0, len)%}
+         <h2> {{ instance_data[i] }} </h2>
+  {%endfor%}
+  <h2> DB String : {{ db_data }} </h2>
+{% else %}
+  <h1>Hello, World!</h1>
+{% endif %}
+
+  {% if contents %}
+  <textarea rows="10" cols="50">
+    {{ contents }}
+  </textarea>
+  {% endif %}
+
+</div>

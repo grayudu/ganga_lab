@@ -1,0 +1,81 @@
+#!/bin/sh
+# Start Script for app
+# chkconfig: 3456 98 99
+# description: app process
+#Startup Script
+
+SHUTDOWN_WAIT=20
+ 
+app_pid() {
+echo `ps aux | grep 'python /etc/app/app.py' | grep -v grep | awk '{ print $2 }'`
+}
+ 
+start() {
+pid=$(app_pid)
+if [ -n "$pid" ]
+then
+echo "app is already running (pid: $pid)"
+else
+# Start app
+echo "Starting app"
+ulimit -n 100000
+umask 007
+logger "app init.d: Starting app..."	
+
+nohup su app -c "python /etc/app/app.py" &
+echo `ps aux | grep 'python /etc/app/app.py' | grep -v grep | awk '{ print $2 }'`
+ echo 'Waiting for app to startup...' 
+ logger 'app init.d: Waiting for app to startup...' 
+fi
+}
+ 
+stop() {
+pid=$(app_pid)
+if [ -n "$pid" ]
+then
+echo "Stoping app"
+logger "app init.d: Stopping app..."
+let kwait=$SHUTDOWN_WAIT
+count=0;
+until [ `ps -p $pid | grep -c $pid` = '0' ] || [ $count -gt $kwait ]
+do
+echo -n -e "\n waiting for processes to exit";
+sleep 1
+let count=$count+1;
+done
+ 
+if [ $count -gt $kwait ]; then
+echo -n -e "\nkilling processes which didn't stop after $SHUTDOWN_WAIT seconds"
+kill -9 $pid
+fi
+else
+echo "app is not running"
+fi
+return 0
+}
+ 
+case $1 in
+start)
+start
+;;
+stop)
+stop
+;;
+restart)
+stop
+start
+;;
+status)
+pid=$(app_pid)
+if [ -n "$pid" ]
+then
+echo "app is running with pid: $pid"
+exit 0
+else
+echo "app is not running"
+exit 1
+fi
+;;
+esac
+exit 0
+
