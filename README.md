@@ -11,13 +11,10 @@ deploying 3tier application
 * AWS KMS used for pushing secrets to cloud.
 
 ## Step 1 - Creating S3 buckets, RDS, KMS
-- Encrpt db master password before running terraform. Update payload on ./otc/main.tf
-- Generate using aws kms key
+- Update variables ./otc/variables.tf except for db password
+- Run terraform cmds for creating KMS, S3 Buckets and RDS
+- terraform plan & apply prompt for db password.
 ```
-  aws --profile <profile> kms encrypt --key-id <kms-id> --plaintext <dbpassword> --output text --query CiphertextBlob
-```
-then run terraform cmds for creating KMS, S3 Buckets and RDS
-```hcl
 cd terraform/otc
 terraform init
 terraform plan
