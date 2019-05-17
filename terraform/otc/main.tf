@@ -84,7 +84,7 @@ resource "aws_security_group_rule" "mysql_inbound_access" {
 
 resource "null_resource" "enc_dbpasswd" {
   provisioner "local-exec" {
-    command = "aws --profile grayudu kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd"
+    command = "aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd"
   }
 }
 
@@ -102,7 +102,7 @@ resource "aws_db_instance" "ganga_rds_mysql" {
   engine                      = "mysql"
   engine_version              = "5.7"
   instance_class              = "${var.db_instance}"
-  name                        = "gangardsmysql"
+  name                        = "${var.db_name}"
   username                    = "admin"
   password                    = "${data.aws_kms_secrets.ganga-rds-secret.plaintext["master_password"]}"
   parameter_group_name        = "default.mysql5.7"
