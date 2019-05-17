@@ -1,6 +1,6 @@
 provider "aws" {
   region  = "${var.region}"
-  profile = "grayudu"
+  profile = "${var.profile}"
 
   # Make it faster by skipping something
   skip_get_ec2_platforms      = true
@@ -82,10 +82,17 @@ resource "aws_security_group_rule" "mysql_inbound_access" {
   cidr_blocks       = ["${data.aws_subnet.ganga.*.cidr_block}"]
 }
 
+resource "null_resource" "enc_dbpasswd" {
+  provisioner "local-exec" {
+    command = "aws --profile grayudu kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd"
+  }
+}
+
+
 data "aws_kms_secrets" "ganga-rds-secret" {
   "secret" {
     name    = "master_password"
-    payload = "AQICAHhTzl84cWwlwGqOzU72WSmkEJZmMD/anfZ1wb7vIawzAwGD2iNUP/F41dyM99kZz/8iAAAAZjBkBgkqhkiG9w0BBwagVzBVAgEAMFAGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMtJHgtkRh5C8d1ow5AgEQgCOIEs8A31NTcPs4RABt3U/bZa1bvgh6x4PQk+UgSMjyERNpFQ=="
+    payload = "${file("/tmp/db_passwd")}"
   }
 }
 
