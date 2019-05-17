@@ -259,3 +259,47 @@ resource "aws_alb_listener" "alb_front_https" {
 #   elb                    = "${module.ganga-elb}"
 # }
 
+#apply WAF Rules
+
+resource "aws_wafregional_ipset" "ipset" {
+  name = "ganga_ipset"
+
+  ip_set_descriptor {
+    type  = "IPV4"
+    value = "70.209.220.187/32"
+  }
+}
+
+resource "aws_wafregional_rule" "waf_rule" {
+  name        = "gangarule"
+  metric_name = "gangarule"
+
+  predicate {
+    data_id = "${aws_wafregional_ipset.ipset.id}"
+    negated = false
+    type    = "IPMatch"
+  }
+}
+
+resource "aws_wafregional_web_acl" "ipblock" {
+  name        = "ipblock"
+  metric_name = "ipblock"
+
+  default_action {
+    type = "ALLOW"
+  }
+
+  rule {
+    action {
+      type = "BLOCK"
+    }
+
+    priority = 1
+    rule_id  = "${aws_wafregional_rule.waf_rule.id}"
+  }
+}
+
+resource "aws_wafregional_web_acl_association" "rule_assign" {
+  resource_arn = "${aws_alb.alb_front.arn}"
+  web_acl_id   = "${aws_wafregional_web_acl.ipblock.id}"
+}
