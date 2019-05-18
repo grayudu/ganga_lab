@@ -1,7 +1,7 @@
 variable "app" {
   type        = "string"
   description = "describe your variable"
-  default     = "ganga"
+  default     = "gangaapp"
 }
 
 variable "profile" {

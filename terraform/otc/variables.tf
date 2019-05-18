@@ -24,7 +24,7 @@ variable "db_name" {
 #do not set db password here! just variable to for RDS creation
 variable "db_passwd" {
   type        = "string"
-  description = "describe your variable"
+  description = "Enter DB password ******"
 }
 
 variable "db_instance" {
