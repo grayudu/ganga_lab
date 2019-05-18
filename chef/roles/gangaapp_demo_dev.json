@@ -1,5 +1,5 @@
 {
-    "name": "ganga_demo_dev",
+    "name": "gangaapp_demo_dev",
     "description": "Ganga Demo environment",
     "chef_type": "role",
     "json_class": "Chef::Role",
