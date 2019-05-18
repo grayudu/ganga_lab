@@ -38,7 +38,6 @@ resource "aws_s3_bucket" "b" {
   }
 }
 
-
 resource "aws_kms_key" "a" {}
 
 resource "aws_kms_alias" "a" {
@@ -72,9 +71,8 @@ resource "aws_security_group" "rds-sg" {
 
 # Ingress Security Port 3306
 resource "aws_security_group_rule" "mysql_inbound_access" {
-  from_port         = 3306
-  protocol          = "tcp"
-
+  from_port = 3306
+  protocol  = "tcp"
 
   security_group_id = "${aws_security_group.rds-sg.id}"
   to_port           = 3306
@@ -84,10 +82,34 @@ resource "aws_security_group_rule" "mysql_inbound_access" {
 
 resource "null_resource" "enc_dbpasswd" {
   provisioner "local-exec" {
-    command = "aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd"
+    command = <<EOT
+     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd;
+     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob > /tmp/server.crt;
+     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob > /tmp/server.key
+   EOT
   }
 }
 
+resource "null_resource" "s3_upload" {
+  provisioner "local-exec" {
+    command = <<EOT
+     aws --profile ${var.profile} s3 cp ../../scripts/sf.jpeg s3://${aws_s3_bucket.b.id} ;
+     aws --profile ${var.profile} s3api put-object-acl --bucket ${aws_s3_bucket.b.id} --key sf.jpeg --acl public-read;
+   EOT
+  }
+}
+
+resource "null_resource" "s3secret_ssl_upload" {
+  provisioner "local-exec" {
+    command = <<EOT
+     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.crt;
+     aws --profile ${var.profile} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.crt --acl private --body /tmp/nginx_server.crt --output text --query 'None' | egrep -v '^None$' || true;
+     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.key;
+     aws --profile ${var.profile} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.key --acl private --body /tmp/nginx_server.key --output text --query 'None' | egrep -v '^None$' || true;
+
+   EOT
+  }
+}
 
 data "aws_kms_secrets" "ganga-rds-secret" {
   "secret" {
@@ -116,5 +138,3 @@ resource "aws_db_instance" "ganga_rds_mysql" {
   multi_az                    = true
   skip_final_snapshot         = true
 }
-
-
