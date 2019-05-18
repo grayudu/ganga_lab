@@ -4,6 +4,12 @@ variable "app" {
   default     = "ganga"
 }
 
+variable "profile" {
+  type        = "string"
+  description = "describe your variable"
+  default     = "grayudu"
+}
+
 variable "bucketname" {
   type        = "string"
   description = "describe your variable"
