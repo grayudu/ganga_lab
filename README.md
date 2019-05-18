@@ -48,9 +48,7 @@ zip -r chef-0.1.0.zip * #get all cookbooks, recipes, roles and environments.
 aws --profile grayudu s3 cp chef-0.1.0.zip s3://<s3bucket>/
 ```
 ## Step 4 execute demo app
-- Creating ALB listener on 443, so ssl certificate has to be upload to IAM
-- Encrypt cert and key using aws KMS
-Update variable with regard bucket and profile
+Update variable with regard s3 bucket and profile
 ```
 cd terraform/demo
 terraform init
