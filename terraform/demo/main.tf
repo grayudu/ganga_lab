@@ -1,6 +1,6 @@
 provider "aws" {
   region  = "${var.region}"
-  profile = ""${var.profile}
+  profile = "${var.profile}"
 
   # Make it faster by skipping something
   skip_get_ec2_platforms      = true
