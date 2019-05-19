@@ -47,7 +47,8 @@ openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out server.crt
 ```
 
 ## Step 3 execute demo app
-Update variables ./demo/variables.tf
+- Update variables ./demo/variables.tf
+
 | Name | Value |
 |------|-------------|
 | region | us-east-1 |
