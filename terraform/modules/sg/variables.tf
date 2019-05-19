@@ -24,3 +24,8 @@ variable "cidr_ec2_443" {
   type        = "list"
   description = "ingress cidr_blocks"
 }
+
+variable "cidr_ec2_8080" {
+  type        = "list"
+  description = "ingress cidr_blocks"
+}
