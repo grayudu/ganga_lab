@@ -6,7 +6,7 @@ deploying 3tier application
 
 ## Details
 
-* demo application hosted on custom VPC of aws, subnet and nat.
+* demo application hosted on custom VPC and multi azs and also RDS.
 * deveoped using terraforms, chef-solo
 * AWS KMS used for pushing secrets to cloud.
 ## Inputs
@@ -47,6 +47,8 @@ openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out server.crt
 ```
 
 ## Step 3 execute demo app
+
+## Inputs
 - Update variables ./demo/variables.tf
 
 | Name | Value |
