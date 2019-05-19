@@ -14,16 +14,43 @@ provider "aws" {
 # Data sources to get VPC, subnets and security group details
 ##############################################################
 data "aws_vpc" "default" {
-  default = true
+  default = false
+
+  tags = {
+    Name = "vpc-ganga"
+  }
 }
 
-data "aws_subnet_ids" "all" {
+data "aws_caller_identity" "current" {}
+
+data "aws_subnet_ids" "private" {
   vpc_id = "${data.aws_vpc.default.id}"
+
+  #vpc_id = "${module.vpc.vpc_id}"
+
+  tags = {
+    Name = "ganga-vpc-private-*"
+  }
 }
 
-data "aws_security_group" "default" {
+data "aws_subnet_ids" "public" {
   vpc_id = "${data.aws_vpc.default.id}"
-  name   = "default"
+
+  #vpc_id = "${module.vpc.vpc_id}"
+
+  tags = {
+    Name = "ganga-vpc-public-*"
+  }
+}
+
+data "aws_subnet" "private-sub" {
+  count = "${length(data.aws_subnet_ids.private.ids)}"
+  id    = "${data.aws_subnet_ids.private.ids[count.index]}"
+}
+
+data "aws_subnet" "public-sub" {
+  count = "${length(data.aws_subnet_ids.public.ids)}"
+  id    = "${data.aws_subnet_ids.public.ids[count.index]}"
 }
 
 data "aws_ami" "amazon_linux" {
@@ -50,25 +77,19 @@ data "aws_ami" "amazon_linux" {
 module "sg" {
   source = "../modules/sg"
 
-  name        = "${var.name}"
-  desc        = "${var.desc}"
-  aws_vpc_id  = "${data.aws_vpc.default.id}"
-  cidr_blocks = ["0.0.0.0/0"]
-
+  name         = "${var.name}"
+  desc         = "${var.desc}"
+  aws_vpc_id   = "${data.aws_vpc.default.id}"
+  cidr_22      = ["${data.aws_subnet.public-sub.*.cidr_block}"]
+  cidr_443     = ["0.0.0.0/0"]
+  cidr_ec2_443 = ["${data.aws_subnet.public-sub.*.cidr_block}"]
 }
 
 module "iam" {
   source = "../modules/iam"
 
   name = "${var.name}"
-
 }
-
-#module "s3" {
-#  source = "../modules/s3"
-#  bucketname = "${var.bucketname}"
-#  region = "${var.region}"
-#}
 
 ######
 # Launch configuration and autoscaling group
@@ -87,7 +108,7 @@ module "ganga" {
   image_id                     = "${data.aws_ami.amazon_linux.id}"
   instance_type                = "t2.micro"
   iam_instance_profile         = "${module.iam.this_iam_instance_profile_id}"
-  security_groups              = ["${module.sg.this_sg_id}"]
+  security_groups              = ["${module.sg.this_ec2_sg_id}"]
   load_balancers               = ["${module.ganga-elb.this_elb_id}"]
   associate_public_ip_address  = true
   recreate_asg_when_lc_changes = true
@@ -98,7 +119,7 @@ module "ganga" {
               curl -L https://omnitruck.chef.io/install.sh | sudo bash -s -- -v 14.4.56
               mkdir /var/chef
               cd /var/chef
-              aws s3 cp s3://${var.bucketname}/chef-0.1.0.zip .
+              aws s3 cp s3://${var.app}-${data.aws_caller_identity.current.account_id}-${var.region}/chef-0.1.0.zip .
               unzip chef-0.1.0.zip
               sleep 10
               chef-solo -c /var/chef/solo.rb -o "role[${var.app}_demo_dev]"
@@ -125,7 +146,7 @@ module "ganga" {
 
   # Auto scaling group
   asg_name                  = "ganga-asg"
-  vpc_zone_identifier       = ["${data.aws_subnet_ids.all.ids}"]
+  vpc_zone_identifier       = ["${data.aws_subnet_ids.private.ids}"]
   health_check_type         = "EC2"
   min_size                  = "${var.min_size}"
   max_size                  = "${var.max_size}"
@@ -140,7 +161,7 @@ module "ganga" {
     },
     {
       key                 = "Project"
-      value               = "${var.appName}"
+      value               = "${var.app}"
       propagate_at_launch = true
     },
   ]
@@ -154,15 +175,18 @@ module "ganga" {
 module "ganga-elb" {
   source          = "../modules/elb"
   name            = "ganga-elb"
-  security_groups = ["${module.sg.this_sg_id}"]
-  subnets         = ["${data.aws_subnet_ids.all.ids}"]
+  security_groups = ["${module.sg.this_lb_sg_id}"]
+  subnets         = ["${data.aws_subnet_ids.public.ids}"]
   internal        = "false"
 
   listener = "${var.listener}"
 
   health_check = "${var.health_check}"
-
 }
+
+#data "aws_kms_key" "foo" {
+#  key_id = "alias/${var.app}"
+#}
 
 data "aws_kms_secrets" "ganga-alb-cert" {
   "secret" {
@@ -182,14 +206,13 @@ resource "aws_iam_server_certificate" "ganga-cert" {
   name             = "ganga-cert"
   certificate_body = "${data.aws_kms_secrets.ganga-alb-cert.plaintext["alb_cert"]}"
   private_key      = "${data.aws_kms_secrets.ganga-alb-key.plaintext["alb_key"]}"
-
 }
 
 resource "aws_alb" "alb_front" {
   name            = "ganga-alb"
   internal        = false
-  security_groups = ["${module.sg.this_sg_id}"]
-  subnets         = ["${data.aws_subnet_ids.all.ids}"]
+  security_groups = ["${module.sg.this_lb_sg_id}"]
+  subnets         = ["${data.aws_subnet_ids.public.ids}"]
 
   tags = [
     {
@@ -199,7 +222,7 @@ resource "aws_alb" "alb_front" {
     },
     {
       key                 = "Project"
-      value               = "${var.appName}"
+      value               = "${var.app}"
       propagate_at_launch = true
     },
   ]
@@ -230,7 +253,7 @@ resource "aws_alb_target_group" "alb_front_https" {
     },
     {
       key                 = "Project"
-      value               = "${var.appName}"
+      value               = "${var.app}"
       propagate_at_launch = true
     },
   ]
