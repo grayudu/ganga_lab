@@ -83,6 +83,7 @@ module "sg" {
   cidr_22      = ["${data.aws_subnet.public-sub.*.cidr_block}"]
   cidr_443     = ["0.0.0.0/0"]
   cidr_ec2_443 = ["${data.aws_subnet.public-sub.*.cidr_block}"]
+  cidr_ec2_8080 = ["${data.aws_subnet.private-sub.*.cidr_block}"]
 }
 
 module "iam" {
