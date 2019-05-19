@@ -12,6 +12,7 @@
   {%for i in range(0, len)%}
          <h2> {{ instance_data[i] }} </h2>
   {%endfor%}
+  <h2> {{ instance_health }} </h2>
   <h2> {{ nginx_ver }} </h2>
 {% else %}
   <h1>Hello, World!</h1>

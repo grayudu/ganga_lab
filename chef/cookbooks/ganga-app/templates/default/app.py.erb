@@ -9,6 +9,7 @@ import boto3
 import subprocess
 import pymysql
 import config
+import requests
 
 
 app = Flask(__name__)
@@ -114,7 +115,7 @@ def health():
 def diag():
     # return 'Hello'
     data = []
-    data_ip = []  
+    data_ip = []
     paginator = client.get_paginator('describe_auto_scaling_groups')
     groups = paginator.paginate(PaginationConfig={'PageSize': 100})
     #print groups
@@ -125,10 +126,25 @@ def diag():
         print(instance_ids)
         for i in instance_ids:
             data.append((i['InstanceId'], i['AvailabilityZone'], i['HealthStatus']))
-        running_instances = ec2.instances.filter(Filters=[{}])
-        for instance in running_instances:
-            data_ip.append(instance.private_ip_address)
-    return render_template('diag.html', name=socket.gethostname(), date=curr_date, len=len(data), instance_data=data, nginx_ver=stdout, color=color_codes[COLOR])
+    running_instances = ec2.instances.filter(Filters=[{'Name': 'instance-state-name', 'Values': ['running']}, {'Name':'tag:Project', 'Values': ['<%= node["ganga-app"]["Project"] %>']}])
+    for instance in running_instances:
+        data_ip.append(instance.private_ip_address)
+    print(data_ip)
+    ins_health = {}
+    for ip in data_ip:
+        try:
+            res = requests.get("http://"+ip+":8080/health")
+            print(res.status_code)
+            if res.status_code == 200:
+                health = "OK"
+                ins_health[ip] = health
+            else:
+                health = "FAIL"
+                ins_health[ip] = health
+        except Exception as x:
+            health = "db down"
+            ins_health[ip] = health
+    return render_template('diag.html', name=socket.gethostname(), date=curr_date, len=len(data), instance_data=data, instance_health=ins_health, nginx_ver=stdout, color=color_codes[COLOR])
 
 if __name__ == "__main__":
 
