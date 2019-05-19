@@ -6,23 +6,30 @@ deploying 3tier application
 
 ## Details
 
-* demo application hosted on default VPC of aws and subnets.
+* demo application hosted on custom VPC of aws, subnet and nat.
 * deveoped using terraforms, chef-solo
 * AWS KMS used for pushing secrets to cloud.
+## Inputs
+- Update variables ./otc/variables.tf except for db password
+
+| Name | Value |
+|------|-------------|
+| region | us-east-1 |
+| profile | aws profile | 
+| azs | ["us-east-1a", "us-east-1b", "us-east-1c"]|
 
 ## Step 1 - Creating S3 buckets, RDS, KMS
-- Update variables ./otc/variables.tf except for db password
 - Run terraform cmds for creating KMS, S3 Buckets and RDS
 - terraform plan & apply prompt for db password.
 Executing selected resource as a pre-requisite for encrypted db password before creating RDS.
 ```
+cd terraform/otc
 terraform init
 terraform plan
 terraform apply -target=null_resource.enc_dbpasswd
 ```
 Rest of resource will be created in following execution
 ```
-cd terraform/otc
 terraform plan
 terraform apply #say yes when all resources listing correctly
 ```
@@ -39,20 +46,17 @@ openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out server.crt
 - execute ./secrets_upload.sh
 ```
 
-## Step 3 Upload Chef cookbooks
-upload chef
-```
-cd chef
-- update attributes for s3 bucket details
-zip -r chef-0.1.0.zip * #get all cookbooks, recipes, roles and environments.
-aws --profile grayudu s3 cp chef-0.1.0.zip s3://<s3bucket>/
-```
-## Step 4 execute demo app
-Update variable with regard s3 bucket and profile
+## Step 3 execute demo app
+Update variables ./demo/variables.tf
+| Name | Value |
+|------|-------------|
+| region | us-east-1 |
+| profile | aws profile | 
+| key_name | key_pair name|
+
 ```
 cd terraform/demo
 terraform init
 terraform plan
 terraform apply #say yes when all resources listing correctly
 ```
-- please update with aws profile details in terraform provider section.
