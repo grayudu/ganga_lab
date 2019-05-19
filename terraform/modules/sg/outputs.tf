@@ -1,6 +1,16 @@
-output "this_sg_id" {
+output "this_bastion_sg_id" {
   description = "The name of the ELB"
-  value       = "${element(concat(aws_security_group.this.*.id, list("")), 0)}"
+  value       = "${element(concat(aws_security_group.this_bastion.*.id, list("")), 0)}"
+}
+
+output "this_lb_sg_id" {
+  description = "The name of the ELB"
+  value       = "${element(concat(aws_security_group.this_lb.*.id, list("")), 0)}"
+}
+
+output "this_ec2_sg_id" {
+  description = "The name of the ELB"
+  value       = "${element(concat(aws_security_group.this_ec2.*.id, list("")), 0)}"
 }
 
 # output "this_elb_arn" {
