@@ -10,24 +10,34 @@ provider "aws" {
   skip_requesting_account_id  = true
 }
 
-data "aws_vpc" "default" {
-  default = true
-}
+#VPC
 
-data "aws_subnet_ids" "all" {
-  vpc_id = "${data.aws_vpc.default.id}"
+module "vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+  name   = "ganga-vpc"
+
+  cidr = "${var.cidr}"
+
+  azs             = "${var.azs}"
+  private_subnets = "${var.private_subnets}"
+  public_subnets  = "${var.public_subnets}"
+
+  assign_generated_ipv6_cidr_block = true
+
+  enable_nat_gateway = true
+  single_nat_gateway = true
+
+  tags = {
+    Owner       = "user"
+    Environment = "dev"
+  }
+
+  vpc_tags = {
+    Name = "vpc-ganga"
+  }
 }
 
 data "aws_caller_identity" "current" {}
-
-data "aws_subnet_ids" "ganga" {
-  vpc_id = "${data.aws_vpc.default.id}"
-}
-
-data "aws_subnet" "ganga" {
-  count = "${length(data.aws_subnet_ids.ganga.ids)}"
-  id    = "${data.aws_subnet_ids.ganga.ids[count.index]}"
-}
 
 resource "aws_s3_bucket" "b" {
   bucket = "${var.app}-${data.aws_caller_identity.current.account_id}-${var.region}"
@@ -60,13 +70,15 @@ resource "aws_s3_bucket" "secret_bucket" {
 }
 
 resource "aws_db_subnet_group" "rds-subnet-group" {
-  name       = "ganga-rds-subnet-group"
-  subnet_ids = ["${data.aws_subnet_ids.all.ids}"]
+  name = "ganga-rds-subnet-group"
+
+  #subnet_ids = ["${data.aws_subnet_ids.private.ids}"]
+  subnet_ids = ["${module.vpc.private_subnets}"]
 }
 
 resource "aws_security_group" "rds-sg" {
   name   = "ganga-rds-sg"
-  vpc_id = "${data.aws_vpc.default.id}"
+  vpc_id = "${module.vpc.vpc_id}"
 }
 
 # Ingress Security Port 3306
@@ -77,15 +89,17 @@ resource "aws_security_group_rule" "mysql_inbound_access" {
   security_group_id = "${aws_security_group.rds-sg.id}"
   to_port           = 3306
   type              = "ingress"
-  cidr_blocks       = ["${data.aws_subnet.ganga.*.cidr_block}"]
+
+  #cidr_blocks       = ["${data.aws_subnet.private-sub.*.cidr_block}"]
+  cidr_blocks = ["${var.private_subnets}"]
 }
 
 resource "null_resource" "enc_dbpasswd" {
   provisioner "local-exec" {
     command = <<EOT
-     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd;
-     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob > /tmp/server.crt;
-     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob > /tmp/server.key
+     aws --profile ${var.profile} --region ${var.region} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext ${var.db_passwd} --output text --query CiphertextBlob > /tmp/db_passwd;
+     aws --profile ${var.profile} --region ${var.region} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob > /tmp/server.crt;
+     aws --profile ${var.profile} --region ${var.region} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob > /tmp/server.key
    EOT
   }
 }
@@ -93,8 +107,17 @@ resource "null_resource" "enc_dbpasswd" {
 resource "null_resource" "s3_upload" {
   provisioner "local-exec" {
     command = <<EOT
-     aws --profile ${var.profile} s3 cp ../../scripts/sf.jpeg s3://${aws_s3_bucket.b.id} ;
-     aws --profile ${var.profile} s3api put-object-acl --bucket ${aws_s3_bucket.b.id} --key sf.jpeg --acl public-read;
+     aws --profile ${var.profile} --region ${var.region} s3 cp ../../scripts/sf.jpeg s3://${aws_s3_bucket.b.id} ;
+     aws --profile ${var.profile} --region ${var.region} s3api put-object-acl --bucket ${aws_s3_bucket.b.id} --key sf.jpeg --acl public-read;
+   EOT
+  }
+}
+
+resource "null_resource" "chef_upload" {
+  provisioner "local-exec" {
+    command = <<EOT
+     cd ../../chef;zip -r /tmp/chef-0.1.0.zip *;
+     aws --profile ${var.profile} --region ${var.region} s3 cp /tmp/chef-0.1.0.zip s3://${aws_s3_bucket.b.id};
    EOT
   }
 }
@@ -102,10 +125,10 @@ resource "null_resource" "s3_upload" {
 resource "null_resource" "s3secret_ssl_upload" {
   provisioner "local-exec" {
     command = <<EOT
-     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.crt;
-     aws --profile ${var.profile} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.crt --acl private --body /tmp/nginx_server.crt --output text --query 'None' | egrep -v '^None$' || true;
-     aws --profile ${var.profile} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.key;
-     aws --profile ${var.profile} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.key --acl private --body /tmp/nginx_server.key --output text --query 'None' | egrep -v '^None$' || true;
+     aws --profile ${var.profile} --region ${var.region} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.crt --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.crt;
+     aws --profile ${var.profile} --region ${var.region} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.crt --acl private --body /tmp/nginx_server.crt --output text --query 'None' | egrep -v '^None$' || true;
+     aws --profile ${var.profile} --region ${var.region} kms encrypt --key-id ${aws_kms_key.a.key_id} --plaintext fileb://../../scripts/server.key --output text --query CiphertextBlob | base64 --decode > /tmp/nginx_server.key;
+     aws --profile ${var.profile} --region ${var.region} s3api put-object --bucket ${aws_s3_bucket.secret_bucket.id} --key nginx_server.key --acl private --body /tmp/nginx_server.key --output text --query 'None' | egrep -v '^None$' || true;
 
    EOT
   }

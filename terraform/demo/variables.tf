@@ -1,7 +1,8 @@
-variable "app" {
+#Region
+variable "region" {
   type        = "string"
   description = "describe your variable"
-  default     = "gangaapp"
+  default     = "us-east-1"
 }
 
 variable "profile" {
@@ -10,28 +11,30 @@ variable "profile" {
   default     = "grayudu"
 }
 
-variable "bucketname" {
+variable "key_name" {
   type        = "string"
-  description = "describe your variable"
-  default     = "gangaapp-101189138796-us-west-2"
+  description = "describe your key_name variable"
+  default     = "ganga_useast1"
 }
+
 #terraform lock
-variable "bucket" {
+#variable "bucket" {
+#  type        = "string"
+#  description = "describe your variable"
+#  default     = "terraform-statelock-store-useast"
+#}
+#variable "dynamodb_table" {
+#  type        = "string"
+#  description = "describe your variable"
+#  default     = "terraform-statelock-useast"
+#}
+
+variable "app" {
   type        = "string"
   description = "describe your variable"
-  default     = "terraform-statelock-store-useast"
+  default     = "gangaapp"
 }
-variable "dynamodb_table" {
-  type        = "string"
-  description = "describe your variable"
-  default     = "terraform-statelock-useast"
-}
-#Region
-variable "region" {
-  type        = "string"
-  description = "describe your variable"
-  default     = "us-west-2"
-}
+
 #Security Group
 variable "name" {
   type        = "string"
@@ -46,11 +49,6 @@ variable "desc" {
 }
 
 #ASG Variables
-variable "key_name" {
-  type        = "string"
-  description = "describe your key_name variable"
-  default     = "ganga_uswest2"
-}
 
 variable "min_size" {
   description = "describe your min_size variable"
@@ -70,11 +68,6 @@ variable "desired_capacity" {
 variable "env" {
   description = "describe your env variable"
   default     = "dev"
-}
-
-variable "appName" {
-  description = "describe your appName variable"
-  default     = "gangademo"
 }
 
 # variable "from_port" {
@@ -127,8 +120,8 @@ variable "health_check" {
 
   default = [
     {
-      target              = "TCP:80"
-      interval            = 30
+      target              = "TCP:443"
+      interval            = 6
       healthy_threshold   = 2
       unhealthy_threshold = 2
       timeout             = 5
