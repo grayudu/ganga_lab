@@ -38,7 +38,6 @@ SSL certgenerated using openssl. sample available under scripts dir.
 openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out server.crt -keyout server.key
 ```
 ## Step 2 DB config  to s3 secret bucket
-- create self signed cert and key
 - update all attributes with otc terraform outputs details #config.py.
 - update script with kms alias and bucket details #secrets_upload.sh
 - encrypt file (get kms id from otc terraform outputs)
