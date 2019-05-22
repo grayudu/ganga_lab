@@ -81,6 +81,13 @@ cookbook_file "/etc/app/templates/diag.html" do
     group "app"
 end
 
+cookbook_file "/etc/app/templates/stats.html" do
+    source "stats.html"
+    mode "0644"
+    owner "app"
+    group "app"
+end
+
 cookbook_file "/etc/init.d/ganga_app" do
     source "ganga_app"
     mode "0755"
