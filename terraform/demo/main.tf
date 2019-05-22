@@ -77,12 +77,12 @@ data "aws_ami" "amazon_linux" {
 module "sg" {
   source = "../modules/sg"
 
-  name         = "${var.name}"
-  desc         = "${var.desc}"
-  aws_vpc_id   = "${data.aws_vpc.default.id}"
-  cidr_22      = ["${data.aws_subnet.public-sub.*.cidr_block}"]
-  cidr_443     = ["0.0.0.0/0"]
-  cidr_ec2_443 = ["${data.aws_subnet.public-sub.*.cidr_block}"]
+  name          = "${var.name}"
+  desc          = "${var.desc}"
+  aws_vpc_id    = "${data.aws_vpc.default.id}"
+  cidr_22       = ["${data.aws_subnet.public-sub.*.cidr_block}"]
+  cidr_443      = ["0.0.0.0/0"]
+  cidr_ec2_443  = ["${data.aws_subnet.public-sub.*.cidr_block}"]
   cidr_ec2_8080 = ["${data.aws_subnet.private-sub.*.cidr_block}"]
 }
 
@@ -326,4 +326,144 @@ resource "aws_wafregional_web_acl" "ipblock" {
 resource "aws_wafregional_web_acl_association" "rule_assign" {
   resource_arn = "${aws_alb.alb_front.arn}"
   web_acl_id   = "${aws_wafregional_web_acl.ipblock.id}"
+}
+
+#ASGMonitor
+resource "null_resource" "lambdazip" {
+  provisioner "local-exec" {
+    command = <<EOT
+     cd ../../scripts;zip -r /tmp/asgscale.zip asgscale.py;
+   EOT
+  }
+}
+
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda_iam"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_lambda_function" "asgloadmonitor" {
+  filename         = "asgscale.zip"
+  function_name    = "asgloadmonitor"
+  role             = "${aws_iam_role.lambda_role.arn}"
+  handler          = "asgscale.lambda_handler"
+  source_code_hash = "${base64sha256(file("asgscale.zip"))}"
+  runtime          = "python3.6"
+
+  depends_on = ["aws_iam_role_policy_attachment.lambda_logs", "aws_cloudwatch_log_group.asgscale"]
+}
+
+resource "aws_cloudwatch_log_group" "asgscale" {
+  name              = "/aws/lambda/asgloadmonitor"
+  retention_in_days = 14
+}
+
+# See also the following AWS managed policy: AWSLambdaBasicExecutionRole
+resource "aws_iam_policy" "lambda_logging" {
+  name        = "lambda_logging"
+  path        = "/"
+  description = "IAM policy for logging from a lambda"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*",
+      "Effect": "Allow"
+    },
+    {
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:UpdateAutoScalingGroup"
+      ],
+      "Resource": [
+        "*"
+      ],
+      "Effect": "Allow"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = "${aws_iam_role.lambda_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_logging.arn}"
+}
+
+
+resource "aws_sns_topic" "scaleup" {
+  name = "asg_scaleup"
+}
+
+resource "aws_sns_topic" "scaledown" {
+  name = "asg_scaledown"
+}
+
+resource "aws_sns_topic_subscription" "scaleup" {
+  topic_arn = "${aws_sns_topic.scaleup.arn}"
+  protocol  = "lambda"
+  endpoint  = "${aws_lambda_function.asgloadmonitor.arn}"
+}
+
+resource "aws_sns_topic_subscription" "scaledown" {
+  topic_arn = "${aws_sns_topic.scaledown.arn}"
+  protocol  = "lambda"
+  endpoint  = "${aws_lambda_function.asgloadmonitor.arn}"
+}
+
+
+resource "aws_lambda_permission" "with_sns_scaleup" {
+  statement_id  = "AllowExecutionFromSNSup"
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.asgloadmonitor.function_name}"
+  principal     = "sns.amazonaws.com"
+  source_arn    = "${aws_sns_topic.scaleup.arn}"
+}
+
+resource "aws_lambda_permission" "with_sns_scaledown" {
+  statement_id  = "AllowExecutionFromSNSdown"
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.asgloadmonitor.function_name}"
+  principal     = "sns.amazonaws.com"
+  source_arn    = "${aws_sns_topic.scaledown.arn}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudwatch_metric_alarm_rpm_high" {
+  alarm_name          = "ganga-asgscale-alarm"
+  alarm_actions       = ["${aws_sns_topic.scaleup.arn}"]
+  ok_actions          = ["${aws_sns_topic.scaledown.arn}"]
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "RequestCountPerTarget"
+  namespace           = "AWS/ApplicationELB"
+  statistic           = "Sum"
+  period              = "60"
+  threshold           = "40"
+  insufficient_data_actions = []
+
+  dimensions {
+    TargetGroup  = "${aws_alb_target_group.alb_front_https.arn_suffix}"
+  }
 }
