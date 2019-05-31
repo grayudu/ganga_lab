@@ -13,7 +13,7 @@ provider "aws" {
 #VPC
 
 module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+  source = "../modules/vpc"
   name   = "ganga-vpc"
 
   cidr = "${var.cidr}"
