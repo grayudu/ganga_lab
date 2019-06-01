@@ -89,6 +89,26 @@ cookbook_file "/etc/security/limits.d/nginx.conf" do
     notifies :restart, resources(:service => "nginx")    
 end
 
+cookbook_file "/etc/nginx/conf.d/stub_status.conf" do
+    source "stub_status.conf"
+    mode "0644"
+    owner "root"
+    group "root"
+    notifies :restart, resources(:service => "nginx")
+end
+
+cookbook_file "/dev/shm/install.sh" do
+    source "install.sh"
+    mode "0644"
+    owner "root"
+    group "root"
+    notifies :restart, resources(:service => "nginx")
+end
+
+execute "install amplify" do
+       command "cd /dev/shm && sh install.sh"
+end
+
 service "nginx" do
   service_name "nginx"
   action [ :start ]
