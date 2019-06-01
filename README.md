@@ -6,8 +6,9 @@ deploying 3tier application
 
 ## Details
 
-* demo application hosted on custom VPC and multi azs and also RDS.
-* deveoped using terraforms, chef-solo
+* demo python application hosted on custom VPC with multi azs public and private subnets and NAT.
+* Creating RDS (mysql) for persistent store.
+* deveoped using terraforms, chef-solo as configuration management
 * AWS KMS used for pushing secrets to cloud.
 ## Inputs
 - Update variables ./otc/variables.tf except for db password
@@ -25,7 +26,7 @@ Executing selected resource as a pre-requisite for encrypted db password before 
 ```
 cd terraform/otc
 terraform init
-terraform plan
+terraform plan -target=null_resource.enc_dbpasswd
 terraform apply -target=null_resource.enc_dbpasswd
 ```
 Rest of resource will be created in following execution
