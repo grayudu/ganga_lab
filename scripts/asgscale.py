@@ -1,6 +1,6 @@
 import json
 import boto3
-autoscaling = boto3.client('autoscaling', region_name='us-east-2')
+autoscaling = boto3.client('autoscaling')
 ec2 = boto3.client('ec2')
 
 # Update auto scaling group max size
